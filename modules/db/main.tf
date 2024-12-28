@@ -1,5 +1,6 @@
 module "rds" {
   source = "terraform-aws-modules/rds/aws"
+  version = "6.10.0"
 
   identifier = "employee-db"
 
@@ -13,9 +14,6 @@ module "rds" {
   
   maintenance_window = "Mon:00:00-Mon:03:00"
   backup_window      = "03:00-06:00"
-  username = "admin"
-  manage_master_user_password = true
-
   # Enhanced Monitoring - see example for details on how to create the role
   # by yourself, in case you don't want to create it automatically
   family = "mysql5.7"

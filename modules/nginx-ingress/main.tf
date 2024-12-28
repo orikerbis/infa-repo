@@ -23,6 +23,7 @@ module "eks_blueprints_addons" {
   }
 
   enable_aws_load_balancer_controller = true
+  enable_external_secrets = true
 
 }
 
