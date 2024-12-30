@@ -47,12 +47,12 @@ resource "kubernetes_ingress_v1" "nginx_test_ingress" {
     name      = "nginx-test-ingress"
     namespace = "ingress"
     annotations = {
-      "alb.ingress.kubernetes.io/ssl-redirect" = 443
+      "alb.ingress.kubernetes.io/ssl-redirect"    = 443
       "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
       "alb.ingress.kubernetes.io/target-type"     = "ip" # Removed the extra space
       "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\":443}]"
       "alb.ingress.kubernetes.io/certificate-arn" = module.acm.acm_certificate_arn
-    
+
     }
   }
 
@@ -86,8 +86,6 @@ resource "kubernetes_ingress_v1" "argocd_ingress" {
   metadata {
     name      = "argocd-ingress"
     namespace = "argocd"
-    annotations = {
-    }
   }
 
   spec {
@@ -99,7 +97,7 @@ resource "kubernetes_ingress_v1" "argocd_ingress" {
           path = "/"
           backend {
             service {
-              name = "argocd-server" # Replace with your Argo CD server service name
+              name = "argocd-server"
               port {
                 number = 80
               }
