@@ -2,7 +2,7 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "20.31.6"
 
-  cluster_name                   = "my-eks"
+  cluster_name                   = var.cluster_name
   cluster_version                = "1.31"
   cluster_endpoint_public_access = true
   cluster_endpoint_private_access = true
@@ -30,7 +30,7 @@ module "eks" {
   create_node_security_group = false
   cluster_security_group_additional_rules = {
     hybrid-all = {
-      cidr_blocks = ["10.0.0.0/16"]
+      cidr_blocks = [var.vpc_cidr]
       description = "Allow all traffic from remote node/pod network"
       from_port   = 3306
       to_port     = 3306

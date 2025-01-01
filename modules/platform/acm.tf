@@ -2,8 +2,8 @@ module "acm" {
   source  = "terraform-aws-modules/acm/aws"
   version = "5.1.1"
 
-  domain_name  = "kerbis.online"
-  zone_id      = "Z08019033CJXYX9250VV4"
+  domain_name  = var.domain_name
+  zone_id      = var.hosted_zone_id
 
   validation_method = "DNS"
 

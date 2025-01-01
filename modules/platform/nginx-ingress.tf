@@ -49,7 +49,7 @@ resource "kubernetes_ingress_v1" "nginx_test_ingress" {
     annotations = {
       "alb.ingress.kubernetes.io/ssl-redirect"    = 443
       "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"     = "ip" # Removed the extra space
+      "alb.ingress.kubernetes.io/target-type"     = "ip" 
       "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\":443}]"
       "alb.ingress.kubernetes.io/certificate-arn" = module.acm.acm_certificate_arn
 
@@ -57,8 +57,7 @@ resource "kubernetes_ingress_v1" "nginx_test_ingress" {
   }
 
   spec {
-    ingress_class_name = "alb" # Ensure this matches the IngressClass configured for ALB
-
+    ingress_class_name = "alb" 
     rule {
       http {
         path {
@@ -91,7 +90,7 @@ resource "kubernetes_ingress_v1" "argocd_ingress" {
   spec {
     ingress_class_name = "nginx"
     rule {
-      host = "argocd.kerbis.online"
+      host = var.argocd_domain
       http {
         path {
           path = "/"
