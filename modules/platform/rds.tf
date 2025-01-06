@@ -81,7 +81,6 @@ resource "aws_security_group" "rds_sg" {
   name        = "rds-sg"
   description = "Security group for RDS instance"
   vpc_id      = module.vpc.vpc_id
-
   tags = {
     Name = "rds-sg"
   }

@@ -4,6 +4,12 @@ provider "aws" {
     role_arn = "arn:aws:iam::825765414083:role/eks-admin-role"
   }
 }
+
+provider "aws" {
+  region = "us-east-1"
+  alias  = "virginia"
+}
+
  terraform {
   required_providers {
     aws = {
