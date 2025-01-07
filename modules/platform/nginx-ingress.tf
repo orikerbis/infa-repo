@@ -1,14 +1,17 @@
 module "eks_blueprints_addons" {
   source  = "aws-ia/eks-blueprints-addons/aws"
-  version = "1.19.0" #ensure to update this to the latest/desired version
+  version = "1.19.0" 
 
   cluster_name      = module.eks.cluster_name
   cluster_endpoint  = module.eks.cluster_endpoint
   cluster_version   = module.eks.cluster_version
   oidc_provider_arn = module.eks.oidc_provider_arn
-
+  
   eks_addons = {
     aws-ebs-csi-driver = {
+      most_recent = true
+    }
+    eks-pod-identity-agent = {
       most_recent = true
     }
     coredns = {
@@ -33,7 +36,7 @@ resource "helm_release" "external_nginx" {
   chart            = "ingress-nginx"
   namespace        = "ingress"
   create_namespace = true
-  version          = "4.12.0-beta.0"
+  version          = "4.12.0"
   set {
     name  = "controller.service.type"
     value = "NodePort"

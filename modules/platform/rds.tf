@@ -42,7 +42,7 @@ resource "random_password" "db_password" {
 }
 
 resource "aws_secretsmanager_secret" "db_credentials" {
-  name        = "rds-db-credentials"
+  name        = "dev/db-credentials"
   description = "RDS database credentials"
 }
 
