@@ -26,3 +26,6 @@ variable "aws_region" {
 variable "backend_bucket_region" {
   type = string
 }
+variable "secret_name" {
+  type = string
+}

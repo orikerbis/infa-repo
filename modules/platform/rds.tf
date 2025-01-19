@@ -15,23 +15,15 @@ module "rds" {
 
   maintenance_window = "Mon:00:00-Mon:03:00"
   backup_window      = "03:00-06:00"
-  # Enhanced Monitoring - see example for details on how to create the role
-  # by yourself, in case you don't want to create it automatically
   family                      = "mysql5.7"
   manage_master_user_password = false
   password                    = random_password.db_password.result
 
-
-
-
-
-  # DB subnet group
   create_db_subnet_group = true
   subnet_ids             = [aws_subnet.db-1.id, aws_subnet.db-2.id]
 
   major_engine_version = "5.7"
 
-  # Database Deletion Protection
   deletion_protection = false
 
 }
@@ -39,20 +31,22 @@ module "rds" {
 resource "random_password" "db_password" {
   length  = 16
   special = true
+  override_special = "!#$%&*()_-+="
 }
 
 resource "aws_secretsmanager_secret" "db_credentials" {
-  name        = "dev/db-credentials"
+  name        = var.secret_name
   description = "RDS database credentials"
 }
 
 resource "aws_secretsmanager_secret_version" "db_credentials_version" {
   secret_id = aws_secretsmanager_secret.db_credentials.id
   secret_string = jsonencode({
-    username = module.rds.db_instance_username
-    password = random_password.db_password.result
-    uri      = module.rds.db_instance_endpoint
+    MYSQL_USER = module.rds.db_instance_username
+    MYSQL_PASSWORD = random_password.db_password.result
+    MYSQL_HOST      = module.rds.db_instance_endpoint
   })
+  depends_on = [ module.rds ]
 }
 
 resource "aws_subnet" "db-1" {
@@ -73,9 +67,7 @@ resource "aws_subnet" "db-2" {
   }
 }
 
-locals {
-  eks_worker_sg_ids = module.eks.node_security_group_id
-}
+
 
 resource "aws_security_group" "rds_sg" {
   name        = "rds-sg"
@@ -92,10 +84,7 @@ resource "aws_security_group_rule" "allow_eks_to_rds_mysql" {
   to_port                  = 3306
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rds_sg.id
-  source_security_group_id = local.eks_worker_sg_ids
-  cidr_blocks              = [module.vpc.vpc_cidr_block]
-
-
+  source_security_group_id = module.eks.node_security_group_id
   description = "Allow EKS nodes to access RDS MySQL"
 }
 

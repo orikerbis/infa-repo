@@ -7,4 +7,5 @@ module "platform" {
   vpc_cidr = "10.0.0.0/16"
   aws_region = "us-east-2"
   backend_bucket_region = "us-east-2"
+  secret_name = "employee-system-5/dev/db-credentials"
 }

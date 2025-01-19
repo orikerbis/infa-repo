@@ -7,44 +7,66 @@ module "eks" {
   cluster_endpoint_public_access = true
   cluster_endpoint_private_access = true
   enable_irsa                    = true
+  control_plane_subnet_ids = module.vpc.intra_subnets
+  cluster_addons = {
+    coredns                = {}
+    eks-pod-identity-agent = {}
+    kube-proxy             = {}
+    vpc-cni                = {}
 
-
+  }
+  
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
-
-  eks_managed_node_group_defaults = {
-    create_iam_role = true
-    iam_role_attach_cni_policy = true
-  }
+ 
 
   enable_cluster_creator_admin_permissions = true
   eks_managed_node_groups = {
     karpenter = {
       ami_type       = "AL2023_x86_64_STANDARD"
-      instance_types = ["m5.large"]
+      instance_types = ["t3.medium"]
       min_size     = 2
-      max_size     = 10
+      max_size     = 4
       desired_size = 2
+      taints = {
+        addons = {
+          key    = "CriticalAddonsOnly"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        },
+      }
     }
   }
-  cluster_security_group_tags = {
+    
+  node_security_group_tags = {
     "karpenter.sh/discovery" = var.cluster_name
   }
+}
 
-  node_security_group_tags = {
-    "kapenter.sh/discovery" = var.cluster_name
+module "eks_blueprints_addons" {
+  source  = "aws-ia/eks-blueprints-addons/aws"
+  version = "1.19.0" 
+
+  cluster_name      = module.eks.cluster_name
+  cluster_endpoint  = module.eks.cluster_endpoint
+  cluster_version   = module.eks.cluster_version
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  enable_aws_load_balancer_controller = true
+  enable_external_secrets             = true
+  depends_on = [ helm_release.karpenter, kubectl_manifest.karpenter_node_class, kubectl_manifest.karpenter_node_pool ] 
+  aws_load_balancer_controller = {
+    set = [ 
+      {
+      name = "vpcId"
+      value = module.vpc.vpc_id 
+      },
+      {
+      name = "region"
+      value = var.aws_region
+      }
+    ] 
   }
-  create_node_security_group = false
-  cluster_security_group_additional_rules = {
-    hybrid-all = {
-      cidr_blocks = [var.vpc_cidr]
-      description = "Allow all traffic from remote node/pod network"
-      from_port   = 3306
-      to_port     = 3306
-      protocol    = "tcp"
-      type        = "ingress"
-    }
-  }
+
 }
 
 module "karpenter" {
@@ -56,13 +78,14 @@ module "karpenter" {
 
   enable_pod_identity             = true
   create_pod_identity_association = true
-  
 
-  # Attach additional IAM policies to the Karpenter node IAM role
   node_iam_role_additional_policies = {
   AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   
   }
+}
+resource "aws_iam_service_linked_role" "spot" {
+  aws_service_name = "spot.amazonaws.com"
 }
 
 data "aws_ecrpublic_authorization_token" "token" {
@@ -78,6 +101,7 @@ resource "helm_release" "karpenter" {
   chart               = "karpenter"
   version             = "1.0.0"
   wait                = false
+
 
   set {
     name  = "serviceAccount.name"
@@ -112,30 +136,28 @@ resource "kubectl_manifest" "karpenter_node_pool" {
           requirements:
             - key: kubernetes.io/arch
               operator: In
-              values: ["amd64"]
+              values: ["amd64", "arm64"]
             - key: kubernetes.io/os
               operator: In
               values: ["linux"]
             - key: karpenter.sh/capacity-type
               operator: In
-              values: ["on-demand"]
-            - key: karpenter.k8s.aws/instance-category
+              values: ["spot", "on-demand"]
+            - key: karpenter.k8s.aws/instance-family
               operator: In
-              values: ["c", "m", "r"]
-            - key: karpenter.k8s.aws/instance-generation
-              operator: Gt
-              values: ["2"]
+              values: ["t3a", "m5a", "m6a", "m5", "m6i"]
+            - key: karpenter.k8s.aws/instance-size
+              operator: In
+              values: ["medium", "large"]
           nodeClassRef:
-            group: karpenter.k8s.aws
-            kind: EC2NodeClass
             name: default
-          expireAfter: 720h # 30 * 24h = 720h
-      limits:
-        cpu: 1000
+            kind: EC2NodeClass
+            group: karpenter.k8s.aws
+          expireAfter: 168h
       disruption:
         consolidationPolicy: WhenEmptyOrUnderutilized
-        consolidateAfter: 1m
-  YAML
+        consolidateAfter: 30s
+      YAML
 
   depends_on = [
     kubectl_manifest.karpenter_node_class
@@ -153,10 +175,10 @@ resource "kubectl_manifest" "karpenter_node_class" {
       role: ${module.karpenter.node_iam_role_name}
       subnetSelectorTerms:
         - tags:
-            karpenter.sh/discovery: ${module.eks.cluster_name}
+            karpenter.sh/discovery: ${var.cluster_name}
       securityGroupSelectorTerms:
         - tags:
-            karpenter.sh/discovery: ${module.eks.cluster_name}
+            karpenter.sh/discovery: ${var.cluster_name}
       amiSelectorTerms:
         - alias: al2@latest
   YAML
@@ -166,35 +188,40 @@ resource "kubectl_manifest" "karpenter_node_class" {
   ]
 }
 
-resource "kubectl_manifest" "karpenter_example_deployment" {
-  yaml_body = <<-YAML
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: inflate
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: inflate
-      template:
-        metadata:
-          labels:
-            app: inflate
-        spec:
-          terminationGracePeriodSeconds: 0
-          containers:
-            - name: inflate
-              image: public.ecr.aws/eks-distro/kubernetes/pause:3.7
-              resources:
-                requests:
-                  cpu: 1
-  YAML
-
-  depends_on = [
-    helm_release.karpenter
-  ]
+resource "helm_release" "prometheus" {
+  namespace = "monitoring"
+  name      = "prometheus"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart     = "kube-prometheus-stack"
+  create_namespace = true
+  version   = "67.9.0"
+  depends_on = [ helm_release.karpenter, kubectl_manifest.karpenter_node_class, kubectl_manifest.karpenter_node_pool, aws_iam_service_linked_role.spot ] 
 }
+
+module "loki_stack" {
+  source = "terraform-iaac/loki-stack/kubernetes"
+
+  namespace        = "monitoring"
+  create_namespace = false
+
+  provider_type          = "local"
+  pvc_storage_class_name = "gp2"
+  pvc_access_modes       = ["ReadWriteOnce"]
+  persistent_volume_size = "10Gi"
+
+  loki_resources = {
+    request_cpu    = "100m"
+    request_memory = "256Mi"
+  }
+
+  promtail_resources = {
+    request_cpu    = "50m"
+    request_memory = "128Mi"
+  }
+  depends_on = [ helm_release.karpenter, kubectl_manifest.karpenter_node_class, kubectl_manifest.karpenter_node_pool ]
+}
+
+
 
 
 

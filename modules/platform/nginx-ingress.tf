@@ -1,35 +1,3 @@
-module "eks_blueprints_addons" {
-  source  = "aws-ia/eks-blueprints-addons/aws"
-  version = "1.19.0" 
-
-  cluster_name      = module.eks.cluster_name
-  cluster_endpoint  = module.eks.cluster_endpoint
-  cluster_version   = module.eks.cluster_version
-  oidc_provider_arn = module.eks.oidc_provider_arn
-  
-  eks_addons = {
-    aws-ebs-csi-driver = {
-      most_recent = true
-    }
-    eks-pod-identity-agent = {
-      most_recent = true
-    }
-    coredns = {
-      most_recent = true
-    }
-    vpc-cni = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-  }
-
-  enable_aws_load_balancer_controller = true
-  enable_external_secrets             = true
-
-}
-
 resource "helm_release" "external_nginx" {
   name             = "external"
   repository       = "https://kubernetes.github.io/ingress-nginx"
@@ -37,11 +5,28 @@ resource "helm_release" "external_nginx" {
   namespace        = "ingress"
   create_namespace = true
   version          = "4.12.0"
-  set {
-    name  = "controller.service.type"
-    value = "NodePort"
-  }
-
+  values = [
+    <<-EOF
+    controller:
+      service:
+        type: NodePort
+      ingressClassResource:
+        name: nginx
+        enabled: true
+      metrics:
+        enabled: true
+        serviceMonitor:
+          enabled: true
+          additionalLabels:
+            release: prometheus
+      podAnnotations:
+        prometheus.io/port: "10254"
+        prometheus.io/scrape: "true"
+      extraArgs:
+        metrics-per-host: "false"
+    externalTrafficPolicy: Cluster
+    EOF
+  ]
   depends_on = [module.eks_blueprints_addons]
 }
 
@@ -67,7 +52,7 @@ resource "kubernetes_ingress_v1" "nginx_test_ingress" {
           path = "/*"
           backend {
             service {
-              name = "external-ingress-nginx-controller" # Replace with your service name
+              name = "external-ingress-nginx-controller" 
               port {
                 number = 80
               }
@@ -114,6 +99,7 @@ resource "kubernetes_ingress_v1" "argocd_ingress" {
     helm_release.external_nginx
   ]
 }
+
 
 
 
